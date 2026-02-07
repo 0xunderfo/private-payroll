@@ -8,6 +8,7 @@ import * as snarkjs from "snarkjs";
 import { buildPoseidon } from "circomlibjs";
 import { createHash } from "crypto";
 import { join } from "path";
+import { existsSync, statSync } from "fs";
 
 const proof = new Hono();
 
@@ -15,6 +16,25 @@ const proof = new Hono();
 const CIRCUIT_WASM_PATH = join(process.cwd(), "circuits/payroll_private.wasm");
 const CIRCUIT_ZKEY_PATH = join(process.cwd(), "circuits/circuit_final.zkey");
 const MAX_RECIPIENTS = 5;
+
+// Health check for circuit files
+proof.get("/status", (c) => {
+  const wasmExists = existsSync(CIRCUIT_WASM_PATH);
+  const zkeyExists = existsSync(CIRCUIT_ZKEY_PATH);
+  const wasmSize = wasmExists ? statSync(CIRCUIT_WASM_PATH).size : 0;
+  const zkeySize = zkeyExists ? statSync(CIRCUIT_ZKEY_PATH).size : 0;
+
+  return c.json({
+    cwd: process.cwd(),
+    wasmPath: CIRCUIT_WASM_PATH,
+    zkeyPath: CIRCUIT_ZKEY_PATH,
+    wasmExists,
+    zkeyExists,
+    wasmSize,
+    zkeySize,
+    ready: wasmExists && zkeyExists,
+  });
+});
 
 // Poseidon instance cache
 let poseidonInstance: any = null;

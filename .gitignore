@@ -4,7 +4,12 @@ out/
 build/
 *.ptau
 cache/
-circuits/build/
+circuits/build/*.ptau
+circuits/build/*.r1cs
+circuits/build/*.sym
+circuits/build/*.zkey
+circuits/build/*.json
+circuits/build/payroll_simple_js/
 contracts/out/
 contracts/cache/
 frontend/.next/

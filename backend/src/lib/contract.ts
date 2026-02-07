@@ -79,6 +79,38 @@ const ZK_PAYROLL_ABI = [
   },
 ] as const;
 
+// ERC20 ABI for approve/allowance
+const ERC20_ABI = [
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
+
+function getUsdtAddress(): Address {
+  const addr = process.env.USDT_ADDRESS;
+  if (!addr) {
+    throw new Error("USDT_ADDRESS not set");
+  }
+  return addr as Address;
+}
+
 let publicClient: PublicClient | null = null;
 let escrowClient: WalletClient | null = null;
 let escrowAccount: PrivateKeyAccount | null = null;
@@ -219,8 +251,31 @@ export async function createPayrollRelayed(
   recipients: readonly Address[]
 ): Promise<{ txHash: `0x${string}`; payrollId: bigint }> {
   const { client, account } = getEscrowClient();
-  const publicClient = getPublicClient();
+  const pubClient = getPublicClient();
   const contractAddress = getContractAddress();
+  const usdtAddress = getUsdtAddress();
+
+  // Check and approve USDT if needed
+  const currentAllowance = await pubClient.readContract({
+    address: usdtAddress,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [account.address, contractAddress],
+  });
+
+  if (currentAllowance < totalAmount) {
+    console.log("[contract] Approving USDT for ZKPayroll contract...");
+    const approveTx = await client.writeContract({
+      address: usdtAddress,
+      abi: ERC20_ABI,
+      functionName: "approve",
+      args: [contractAddress, totalAmount * 10n], // Approve 10x to reduce future approvals
+      account,
+      chain: plasma,
+    });
+    await pubClient.waitForTransactionReceipt({ hash: approveTx });
+    console.log("[contract] USDT approved:", approveTx);
+  }
 
   // Convert to fixed-size tuples (must cast through unknown for TypeScript)
   const proofArray = [...proof.slice(0, 8)] as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint];
@@ -237,7 +292,7 @@ export async function createPayrollRelayed(
   });
 
   // Wait for receipt and parse payrollId from logs
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  const receipt = await pubClient.waitForTransactionReceipt({ hash: txHash });
 
   // Parse PayrollCreated event to get payrollId
   let payrollId = 0n;

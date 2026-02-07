@@ -139,7 +139,7 @@ export const zkPayrollPrivateAbi = [
 
 // EIP-712 Domain for USDT0 on Plasma Testnet
 export const USDT0_EIP712_DOMAIN = {
-  name: "USD Token",
+  name: "USDT0",
   version: "1",
   chainId: 9746, // Plasma Testnet
   verifyingContract: "0x502012b361AebCE43b26Ec812B74D9a51dB4D412" as `0x${string}`, // USDT0

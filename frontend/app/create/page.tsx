@@ -116,8 +116,8 @@ export default function CreatePayroll() {
         from: address,
         to: escrowAddress as `0x${string}`,
         value: rawTotal,
-        validAfter: 0n,
-        validBefore: now + 3600n, // 1 hour
+        validAfter: now - 60n, // Valid from 1 minute ago (clock skew buffer)
+        validBefore: now + 3600n, // Valid until 1 hour from now
         nonce: generateNonce(),
       };
 

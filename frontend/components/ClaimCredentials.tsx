@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ClaimCredential } from "../lib/proof";
+import type { ClaimCredential } from "../lib/types";
 
 interface ClaimCredentialsProps {
   credentials: ClaimCredential[];

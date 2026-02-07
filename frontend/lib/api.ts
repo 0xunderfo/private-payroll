@@ -3,6 +3,9 @@
  * Handles communication with zero-fee claim backend
  */
 
+import type { ClaimCredential } from "./types";
+export type { ClaimCredential };
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 export interface VerifyClaimResponse {
@@ -135,15 +138,6 @@ export async function checkBackendHealth(): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-// Proof generation types
-export interface ClaimCredential {
-  commitmentIndex: number;
-  recipient: string;
-  amount: string;
-  salt: string;
-  commitment: string;
 }
 
 export interface ProofGenerationResponse {

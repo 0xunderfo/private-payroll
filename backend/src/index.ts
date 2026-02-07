@@ -59,7 +59,20 @@ app.onError((err, c) => {
 const port = parseInt(process.env.PORT || "3001");
 console.log(`ZK Payroll Backend starting on port ${port}...`);
 
-export default {
-  port,
-  fetch: app.fetch,
-};
+// Check if running under Bun or Node
+if (typeof Bun !== "undefined") {
+  // Bun runtime
+  export default {
+    port,
+    fetch: app.fetch,
+  };
+} else {
+  // Node.js runtime - use @hono/node-server
+  import("@hono/node-server").then(({ serve }) => {
+    serve({
+      fetch: app.fetch,
+      port,
+    });
+    console.log(`Started server: http://localhost:${port}`);
+  });
+}

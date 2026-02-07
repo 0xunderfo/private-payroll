@@ -28,6 +28,21 @@ export async function submitZeroFeeTransfer(
     throw new Error("PLASMA_RELAYER_API_KEY not set");
   }
 
+  const requestBody = {
+    authorization: {
+      from: authorization.from,
+      to: authorization.to,
+      value: authorization.value.toString(),
+      validAfter: authorization.validAfter.toString(),
+      validBefore: authorization.validBefore.toString(),
+      nonce: authorization.nonce,
+    },
+    signature,
+  };
+
+  console.log("[relayer] Submitting to:", `${RELAYER_API}/v1/submit`);
+  console.log("[relayer] Request body:", JSON.stringify(requestBody, null, 2));
+
   const response = await fetch(`${RELAYER_API}/v1/submit`, {
     method: "POST",
     headers: {
@@ -35,25 +50,24 @@ export async function submitZeroFeeTransfer(
       "X-Api-Key": apiKey,
       "X-User-IP": userIp,
     },
-    body: JSON.stringify({
-      authorization: {
-        from: authorization.from,
-        to: authorization.to,
-        value: authorization.value.toString(),
-        validAfter: authorization.validAfter.toString(),
-        validBefore: authorization.validBefore.toString(),
-        nonce: authorization.nonce,
-      },
-      signature,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
+  const responseText = await response.text();
+  console.log("[relayer] Response status:", response.status);
+  console.log("[relayer] Response body:", responseText);
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: { message: "Unknown error" } }));
-    throw new Error(error.error?.message || `Relayer error: ${response.status}`);
+    let error: { error?: { message?: string }; message?: string };
+    try {
+      error = JSON.parse(responseText);
+    } catch {
+      error = { message: responseText };
+    }
+    throw new Error(error.error?.message || error.message || `Relayer error: ${response.status}`);
   }
 
-  return response.json();
+  return JSON.parse(responseText);
 }
 
 /**

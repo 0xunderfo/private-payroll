@@ -15,15 +15,15 @@ import { plasma } from "./chains";
 
 // EIP-712 Domain for USDT0 on Plasma
 const EIP712_DOMAIN = {
-  name: "USD Token",
+  name: "USDT0",
   version: "1",
   chainId: plasma.id,
   verifyingContract: process.env.USDT_ADDRESS as Address,
 };
 
-// EIP-3009 ReceiveWithAuthorization type
-const RECEIVE_WITH_AUTH_TYPE = {
-  ReceiveWithAuthorization: [
+// EIP-3009 TransferWithAuthorization type
+const TRANSFER_WITH_AUTH_TYPE = {
+  TransferWithAuthorization: [
     { name: "from", type: "address" },
     { name: "to", type: "address" },
     { name: "value", type: "uint256" },
@@ -108,8 +108,8 @@ export async function signAuthorization(
   const signature = await client.signTypedData({
     account,
     domain: EIP712_DOMAIN,
-    types: RECEIVE_WITH_AUTH_TYPE,
-    primaryType: "ReceiveWithAuthorization",
+    types: TRANSFER_WITH_AUTH_TYPE,
+    primaryType: "TransferWithAuthorization",
     message: authorization,
   });
 
@@ -122,8 +122,8 @@ export async function signAuthorization(
 export function buildTypedData(authorization: EIP3009Authorization) {
   return {
     domain: EIP712_DOMAIN,
-    types: RECEIVE_WITH_AUTH_TYPE,
-    primaryType: "ReceiveWithAuthorization" as const,
+    types: TRANSFER_WITH_AUTH_TYPE,
+    primaryType: "TransferWithAuthorization" as const,
     message: authorization,
   };
 }

@@ -129,6 +129,13 @@ See [RUNBOOK.md](./RUNBOOK.md) for detailed instructions including circuit compi
 4. **Verify On-Chain**: Groth16Verifier checks BN254 pairing (EVM precompile at `0x08`)
 5. **Distribute**: ZKPayroll transfers USDT to each recipient
 
+## Videos
+
+| Video | Description | Link |
+|-------|-------------|------|
+| Pitch (2:30) | Project overview for Prog Crypto track | *Coming soon* |
+| Demo (75s) | Full flow demo for Plasma bounty | *Coming soon* |
+
 ## Hackathon
 
 Built at ETH Oxford 2026.
@@ -137,13 +144,22 @@ Built at ETH Oxford 2026.
 - Main: Programmable Cryptography ($10K)
 - Sponsor: Plasma Payments Bounty ($5K)
 
-## 2-Minute Pitch Outline
+## Plasma Developer Experience
 
-1. **Problem (20s)**: DAOs paying on-chain expose salaries, burn rate, comp structure
-2. **Solution (20s)**: ZK Payroll -- upload CSV, ZK proof verifies total, payments execute privately
-3. **Live Demo (60s)**: Enter 3 recipients, generate proof, submit, show on explorer -- only total visible
-4. **Why Plasma (15s)**: Zero-fee USDT transfers, EVM compatible
-5. **Team + Architecture (25s)**: Circom Groth16 + Solidity verifier + Next.js
+We chose Plasma because private payroll only works if recipients can claim without paying gas. Plasma's zero-fee USDT transfers solved this elegantly.
+
+### What Worked Well
+- **Zero-fee USDT transfers** — Core to our gasless claim UX
+- **EVM compatibility** — Contracts deployed without modification
+- **Testnet stability** — Reliable throughout the hackathon
+- **EIP-3009 support** — Enabled gasless deposit flow
+
+### Suggestions
+- More documentation for `transferWithAuthorization` pattern
+- Block explorer contract verification support
+- Higher testnet faucet limits for hackathons
+
+> See [deliverables/docs/plasma-feedback.md](./deliverables/docs/plasma-feedback.md) for full feedback.
 
 ## Team
 

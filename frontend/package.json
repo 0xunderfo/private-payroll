@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.10",
     "@tanstack/react-query": "^5.0.0",
     "circomlibjs": "^0.1.7",
     "next": "^14.0.0",

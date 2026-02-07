@@ -1,0 +1,14 @@
+# Force Railway to use Node.js instead of Bun
+# snarkjs web-worker crashes with Bun runtime
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm install -g tsx && mkdir -p /app/circuits && cp -r circuits/* /app/circuits/ 2>/dev/null || true"]
+
+[start]
+cmd = "tsx src/index.ts"

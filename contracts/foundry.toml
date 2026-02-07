@@ -35,6 +35,7 @@ localhost = "http://127.0.0.1:8545"
 
 # Etherscan API keys
 [etherscan]
+plasma_testnet = { key = "${PLASMASCAN_API_KEY}", url = "https://api-testnet.plasmascan.to/api", chain = 9746 }
 plasma = { key = "${PLASMASCAN_API_KEY}", url = "https://plasmascan.to/api" }
 sepolia = { key = "${ETHERSCAN_API_KEY}" }
 

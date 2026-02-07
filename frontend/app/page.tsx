@@ -60,7 +60,7 @@ export default function LandingPage() {
               Launch App &rarr;
             </Link>
             <a
-              href="https://github.com/0xunderfo/zk-payroll"
+              href="https://github.com/user/zk-payroll"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-7 py-3 text-[0.9375rem] font-medium rounded-xl bg-transparent text-zk-text border border-white/10 hover:bg-white/[0.04] hover:border-white/15 transition-all hover:-translate-y-px"

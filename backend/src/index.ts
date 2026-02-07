@@ -7,6 +7,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import claim from "./routes/claim";
+import proof from "./routes/proof";
+import payroll from "./routes/payroll";
 
 const app = new Hono();
 
@@ -39,6 +41,8 @@ app.get("/health", (c) => {
 
 // API routes
 app.route("/api/claim", claim);
+app.route("/api/proof", proof);
+app.route("/api/payroll", payroll);
 
 // 404 handler
 app.notFound((c) => {

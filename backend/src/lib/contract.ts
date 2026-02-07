@@ -42,6 +42,19 @@ const ZK_PAYROLL_ABI = [
     outputs: [],
   },
   {
+    name: "createPayrollRelayed",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "employer", type: "address" },
+      { name: "proof", type: "uint256[8]" },
+      { name: "totalAmount", type: "uint256" },
+      { name: "commitments", type: "uint256[5]" },
+      { name: "recipients", type: "address[5]" },
+    ],
+    outputs: [{ name: "payrollId", type: "uint256" }],
+  },
+  {
     name: "isClaimed",
     type: "function",
     stateMutability: "view",
@@ -192,4 +205,55 @@ export async function getPayrollInfo(payrollId: bigint) {
     });
 
   return { employer, totalAmount, claimedCount, claimedAmount, createdAt };
+}
+
+/**
+ * Create payroll via relayed transaction (escrow already has funds)
+ * Called by backend after EIP-3009 transfer is confirmed
+ */
+export async function createPayrollRelayed(
+  employer: Address,
+  proof: readonly bigint[],
+  totalAmount: bigint,
+  commitments: readonly bigint[],
+  recipients: readonly Address[]
+): Promise<{ txHash: `0x${string}`; payrollId: bigint }> {
+  const { client, account } = getEscrowClient();
+  const publicClient = getPublicClient();
+  const contractAddress = getContractAddress();
+
+  // Convert to fixed-size tuples (must cast through unknown for TypeScript)
+  const proofArray = [...proof.slice(0, 8)] as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint];
+  const commitmentsArray = [...commitments.slice(0, 5)] as unknown as readonly [bigint, bigint, bigint, bigint, bigint];
+  const recipientsArray = [...recipients.slice(0, 5)] as unknown as readonly [Address, Address, Address, Address, Address];
+
+  const txHash = await client.writeContract({
+    address: contractAddress,
+    abi: ZK_PAYROLL_ABI,
+    functionName: "createPayrollRelayed",
+    args: [employer, proofArray, totalAmount, commitmentsArray, recipientsArray],
+    account,
+    chain: plasma,
+  });
+
+  // Wait for receipt and parse payrollId from logs
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+  // Parse PayrollCreated event to get payrollId
+  let payrollId = 0n;
+  for (const log of receipt.logs) {
+    try {
+      // PayrollCreated event topic: keccak256("PayrollCreated(uint256,address,uint256)")
+      const eventTopic = "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0";
+      // Actually we need to decode the indexed payrollId from topics[1]
+      if (log.topics[0] && log.topics[1]) {
+        payrollId = BigInt(log.topics[1]);
+        break;
+      }
+    } catch {
+      // Skip logs we can't parse
+    }
+  }
+
+  return { txHash, payrollId };
 }

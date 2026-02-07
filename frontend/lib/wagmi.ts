@@ -1,11 +1,10 @@
 /**
  * Wagmi Configuration
- * Sets up wallet connections and chain config
+ * Sets up wallet connections and chain config with RainbowKit
  */
 
-import { http, createConfig } from "wagmi";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { defineChain } from "viem";
-import { injected } from "wagmi/connectors";
 
 export const plasmaTestnet = defineChain({
   id: 9746,
@@ -45,24 +44,22 @@ export const localhost = defineChain({
   testnet: true,
 });
 
-export const config = createConfig({
+export const config = getDefaultConfig({
+  appName: "ZK Payroll",
+  projectId: "YOUR_WALLETCONNECT_PROJECT_ID", // Get from cloud.walletconnect.com
   chains: [localhost, plasmaTestnet],
-  connectors: [injected()],
-  transports: {
-    [plasmaTestnet.id]: http(),
-    [localhost.id]: http(),
-  },
+  ssr: true,
 });
 
 // Contract addresses (updated after deployment)
 // These will be set when you run `forge script Deploy.s.sol`
 export const contracts = {
   zkPayroll: {
-    [plasmaTestnet.id]: "0x0000000000000000000000000000000000000000" as `0x${string}`,
+    [plasmaTestnet.id]: "0x20968f24Ce6A04fa90C7DF771d7FD3821372c68c" as `0x${string}`,
     [localhost.id]: "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318" as `0x${string}`,
   },
   usdt: {
-    [plasmaTestnet.id]: "0x0000000000000000000000000000000000000000" as `0x${string}`,
+    [plasmaTestnet.id]: "0x502012b361AebCE43b26Ec812B74D9a51dB4D412" as `0x${string}`,
     [localhost.id]: "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6" as `0x${string}`,
   },
 };

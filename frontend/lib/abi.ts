@@ -5,7 +5,19 @@ export const zkPayrollPrivateAbi = [
     inputs: [
       { name: "proof", type: "uint256[8]" },
       { name: "totalAmount", type: "uint256" },
-      { name: "activeCount", type: "uint256" },
+      { name: "commitments", type: "uint256[5]" },
+      { name: "recipients", type: "address[5]" },
+    ],
+    outputs: [{ name: "payrollId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "createPayrollRelayed",
+    inputs: [
+      { name: "employer", type: "address" },
+      { name: "proof", type: "uint256[8]" },
+      { name: "totalAmount", type: "uint256" },
       { name: "commitments", type: "uint256[5]" },
       { name: "recipients", type: "address[5]" },
     ],
@@ -62,7 +74,6 @@ export const zkPayrollPrivateAbi = [
     outputs: [
       { name: "employer", type: "address" },
       { name: "totalAmount", type: "uint256" },
-      { name: "activeCount", type: "uint256" },
       { name: "claimedCount", type: "uint256" },
       { name: "claimedAmount", type: "uint256" },
       { name: "createdAt", type: "uint256" },
@@ -90,7 +101,6 @@ export const zkPayrollPrivateAbi = [
       { name: "payrollId", type: "uint256", indexed: true },
       { name: "employer", type: "address", indexed: true },
       { name: "totalAmount", type: "uint256", indexed: false },
-      { name: "activeCount", type: "uint256", indexed: false },
     ],
     anonymous: false,
   },
@@ -126,6 +136,35 @@ export const zkPayrollPrivateAbi = [
   { type: "error", name: "Unauthorized", inputs: [] },
   { type: "error", name: "NothingToReclaim", inputs: [] },
 ] as const;
+
+// EIP-712 Domain for USDT0 on Plasma Testnet
+export const USDT0_EIP712_DOMAIN = {
+  name: "USD Token",
+  version: "1",
+  chainId: 9746, // Plasma Testnet
+  verifyingContract: "0x502012b361AebCE43b26Ec812B74D9a51dB4D412" as `0x${string}`, // USDT0
+} as const;
+
+// EIP-3009 ReceiveWithAuthorization types for gasless transfers
+export const RECEIVE_WITH_AUTHORIZATION_TYPES = {
+  ReceiveWithAuthorization: [
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "value", type: "uint256" },
+    { name: "validAfter", type: "uint256" },
+    { name: "validBefore", type: "uint256" },
+    { name: "nonce", type: "bytes32" },
+  ],
+} as const;
+
+export interface EIP3009Authorization {
+  from: `0x${string}`;
+  to: `0x${string}`;
+  value: bigint;
+  validAfter: bigint;
+  validBefore: bigint;
+  nonce: `0x${string}`;
+}
 
 export const erc20Abi = [
   {

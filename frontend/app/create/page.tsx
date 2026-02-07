@@ -1,15 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWriteContract, useChainId } from "wagmi";
-import { parseUnits } from "viem";
+import { useAccount, useWriteContract, useChainId, usePublicClient, useReadContract, useWalletClient } from "wagmi";
+import { parseUnits, parseEventLogs, formatUnits } from "viem";
 import { PayrollForm } from "../../components/PayrollForm";
 import { ProofStatus } from "../../components/ProofStatus";
 import { WalletButton } from "../../components/WalletButton";
 import { ClaimCredentials } from "../../components/ClaimCredentials";
-import { generatePrivatePayrollProof, type PrivatePayrollProof, type ClaimCredential } from "../../lib/proof";
-import { zkPayrollPrivateAbi, erc20Abi } from "../../lib/abi";
-import { contracts } from "../../lib/wagmi";
+import {
+  generateProof,
+  getEscrowAddress,
+  createPayrollGasless,
+  generateNonce,
+  checkBackendHealth,
+  type ProofGenerationResponse,
+  type ClaimCredential
+} from "../../lib/api";
+import {
+  zkPayrollPrivateAbi,
+  erc20Abi,
+  USDT0_EIP712_DOMAIN,
+  RECEIVE_WITH_AUTHORIZATION_TYPES,
+  type EIP3009Authorization
+} from "../../lib/abi";
+import { contracts, plasmaTestnet } from "../../lib/wagmi";
 
 const USDT_DECIMALS = 6;
 const MAX_RECIPIENTS = 5;
@@ -18,6 +32,8 @@ const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 export default function CreatePayroll() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
   const [payrollData, setPayrollData] = useState<{
     recipients: string[];
     amounts: string[];
@@ -26,10 +42,12 @@ export default function CreatePayroll() {
   const [proofStatus, setProofStatus] = useState<
     "idle" | "generating" | "ready" | "submitting" | "complete" | "error"
   >("idle");
-  const [proofData, setProofData] = useState<PrivatePayrollProof | null>(null);
+  const [proofData, setProofData] = useState<ProofGenerationResponse | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [payrollId, setPayrollId] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [useGasless, setUseGasless] = useState(true); // Default to gasless on Plasma
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const { writeContractAsync } = useWriteContract();
 
@@ -37,6 +55,19 @@ export default function CreatePayroll() {
   const usdtAddress = contracts.usdt[chainId as keyof typeof contracts.usdt] || contracts.usdt[31337];
 
   const explorerUrl = chainId === 9746 ? "https://testnet.plasmascan.to" : null;
+
+  // Fetch USDT balance
+  const { data: usdtBalance } = useReadContract({
+    address: usdtAddress as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
+  const formattedBalance = usdtBalance
+    ? formatUnits(usdtBalance as bigint, USDT_DECIMALS)
+    : "0";
 
   const handleGenerateProof = async () => {
     if (!payrollData) return;
@@ -49,7 +80,8 @@ export default function CreatePayroll() {
       );
       const rawTotal = parseUnits(payrollData.total, USDT_DECIMALS).toString();
 
-      const proof = await generatePrivatePayrollProof(
+      // Use backend API for proof generation (snarkjs doesn't work in browser)
+      const proof = await generateProof(
         payrollData.recipients,
         rawAmounts,
         rawTotal
@@ -64,10 +96,86 @@ export default function CreatePayroll() {
     }
   };
 
-  const handleSubmitPayroll = async () => {
+  const handleSubmitPayrollGasless = async () => {
+    if (!payrollData || !proofData || !address || !walletClient) return;
+    setProofStatus("submitting");
+    setErrorMsg(null);
+    setStatusMsg("Fetching escrow address...");
+
+    try {
+      const rawTotal = parseUnits(payrollData.total, USDT_DECIMALS);
+
+      // Step 1: Get escrow address from backend
+      const escrowAddress = await getEscrowAddress();
+      console.log("Escrow address:", escrowAddress);
+
+      // Step 2: Build EIP-3009 authorization
+      setStatusMsg("Please sign the authorization...");
+      const now = BigInt(Math.floor(Date.now() / 1000));
+      const authorization: EIP3009Authorization = {
+        from: address,
+        to: escrowAddress as `0x${string}`,
+        value: rawTotal,
+        validAfter: 0n,
+        validBefore: now + 3600n, // 1 hour
+        nonce: generateNonce(),
+      };
+
+      // Step 3: Sign EIP-712 typed data (gasless!)
+      const signature = await walletClient.signTypedData({
+        domain: USDT0_EIP712_DOMAIN,
+        types: RECEIVE_WITH_AUTHORIZATION_TYPES,
+        primaryType: "ReceiveWithAuthorization",
+        message: authorization,
+      });
+      console.log("Signature obtained:", signature.slice(0, 20) + "...");
+
+      // Step 4: Submit to backend
+      setStatusMsg("Creating payroll (this may take ~30s)...");
+      const result = await createPayrollGasless({
+        recipients: payrollData.recipients,
+        amounts: payrollData.amounts.map((a) => parseUnits(a, USDT_DECIMALS).toString()),
+        totalAmount: rawTotal.toString(),
+        proof: proofData.proof,
+        commitments: proofData.commitments,
+        claimCredentials: proofData.claimCredentials,
+        employer: address,
+        authorization: {
+          from: authorization.from,
+          to: authorization.to,
+          value: authorization.value.toString(),
+          validAfter: authorization.validAfter.toString(),
+          validBefore: authorization.validBefore.toString(),
+          nonce: authorization.nonce,
+        },
+        signature,
+      });
+
+      console.log("Payroll created:", result);
+      setTxHash(result.txHash);
+      setPayrollId(result.payrollId);
+      // Update claimCredentials with URLs from backend
+      if (result.claimCredentials) {
+        setProofData({
+          ...proofData,
+          claimCredentials: result.claimCredentials,
+        });
+      }
+      setProofStatus("complete");
+      setStatusMsg(null);
+    } catch (e: any) {
+      console.error("Gasless payroll error:", e);
+      setErrorMsg(e?.shortMessage || e?.message || "Gasless payroll creation failed");
+      setProofStatus("ready");
+      setStatusMsg(null);
+    }
+  };
+
+  const handleSubmitPayrollDirect = async () => {
     if (!payrollData || !proofData || !address) return;
     setProofStatus("submitting");
     setErrorMsg(null);
+    setStatusMsg("Approving USDT...");
 
     try {
       const rawTotal = parseUnits(payrollData.total, USDT_DECIMALS);
@@ -92,28 +200,52 @@ export default function CreatePayroll() {
       });
 
       // Step 2: Create payroll
+      setStatusMsg("Creating payroll...");
       console.log("Creating payroll...");
+      // Convert proof strings to bigints for contract
+      const proofBigInts = proofData.proof.map((p) => BigInt(p));
       const executeTx = await writeContractAsync({
         address: zkPayrollAddress as `0x${string}`,
         abi: zkPayrollPrivateAbi,
         functionName: "createPayroll",
         args: [
-          proofData.proof as any,
+          proofBigInts as any,
           rawTotal,
-          BigInt(payrollData.recipients.length),
           commitmentsBigInt as any,
           paddedRecipients as any,
         ],
       });
 
       setTxHash(executeTx);
-      // For now assume payrollId 0 for first payroll; in production read from events
-      setPayrollId(0);
+
+      // Parse payrollId from event logs
+      if (publicClient) {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: executeTx });
+        const logs = parseEventLogs({
+          abi: zkPayrollPrivateAbi,
+          logs: receipt.logs,
+          eventName: "PayrollCreated",
+        });
+        if (logs.length > 0) {
+          setPayrollId(Number(logs[0].args.payrollId));
+        }
+      }
+
       setProofStatus("complete");
+      setStatusMsg(null);
     } catch (e: any) {
       console.error("Transaction error:", e);
       setErrorMsg(e?.shortMessage || e?.message || "Transaction failed");
       setProofStatus("ready");
+      setStatusMsg(null);
+    }
+  };
+
+  const handleSubmitPayroll = () => {
+    if (useGasless && chainId === plasmaTestnet.id) {
+      handleSubmitPayrollGasless();
+    } else {
+      handleSubmitPayrollDirect();
     }
   };
 
@@ -177,6 +309,41 @@ export default function CreatePayroll() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Top Bar: Balance + Claim */}
+            <div className="flex items-center gap-4">
+              {/* Balance Card */}
+              <div className="flex-1 bg-zk-card rounded-2xl p-4 border border-white/[0.06] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-zk-dim text-xs font-display uppercase tracking-wider">Available Balance</p>
+                    <p className="text-xl font-bold font-display tabular-nums">
+                      {Number(formattedBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-zk-muted text-sm">USDT</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-zk-dim text-xs font-display">Network</p>
+                  <p className="text-zk-muted text-sm font-display">{chainId === 9746 ? "Plasma Testnet" : "Localhost"}</p>
+                </div>
+              </div>
+
+              {/* Claim Button - Separate */}
+              <a
+                href="/claim"
+                className="h-full px-5 py-4 bg-zk-accent hover:bg-zk-accent-hover rounded-2xl text-sm font-semibold transition-all text-zk-bg flex flex-col items-center justify-center gap-1 hover:-translate-y-px"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Claim</span>
+              </a>
+            </div>
+
             {/* Step 1: Upload Payroll */}
             <section className="bg-zk-card rounded-2xl p-6 border border-white/[0.06]">
               <div className="flex items-center gap-3 mb-5">
@@ -238,6 +405,36 @@ export default function CreatePayroll() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Gasless toggle - only on Plasma */}
+                  {chainId === plasmaTestnet.id && (
+                    <div className="flex items-center justify-between bg-zk-inset rounded-xl p-4 border border-white/[0.04]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-zk-text">Gasless Mode</p>
+                          <p className="text-xs text-zk-muted">No XPL needed — just sign a message</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setUseGasless(!useGasless)}
+                        className={`relative w-12 h-6 rounded-full transition-colors ${
+                          useGasless ? "bg-zk-accent" : "bg-zk-surface"
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                            useGasless ? "translate-x-6" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2 text-sm text-zk-muted">
                     <svg className="w-4 h-4 text-zk-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -253,7 +450,9 @@ export default function CreatePayroll() {
                     onClick={handleSubmitPayroll}
                     className="w-full py-3 px-6 bg-zk-accent hover:bg-zk-accent-hover text-zk-bg rounded-xl font-semibold transition-all hover:-translate-y-px text-sm"
                   >
-                    Approve USDT & Create Payroll
+                    {useGasless && chainId === plasmaTestnet.id
+                      ? "Sign & Create Payroll (Gasless)"
+                      : "Approve USDT & Create Payroll"}
                   </button>
                 </div>
               </section>
@@ -264,8 +463,12 @@ export default function CreatePayroll() {
               <section className="bg-zk-card rounded-2xl p-6 border border-white/[0.06]">
                 <div className="text-center py-6">
                   <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-zk-accent border-t-transparent mb-4"></div>
-                  <p className="text-zk-text text-sm">Submitting transactions...</p>
-                  <p className="text-zk-dim text-xs mt-1">Please confirm in your wallet</p>
+                  <p className="text-zk-text text-sm">{statusMsg || "Processing..."}</p>
+                  <p className="text-zk-dim text-xs mt-1">
+                    {useGasless && chainId === plasmaTestnet.id
+                      ? "Gasless transaction via Plasma relayer"
+                      : "Please confirm in your wallet"}
+                  </p>
                 </div>
               </section>
             )}

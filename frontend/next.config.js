@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ["@rainbow-me/rainbowkit"],
 
   webpack: (config, { isServer }) => {
     // Required for snarkjs and circomlibjs browser compatibility

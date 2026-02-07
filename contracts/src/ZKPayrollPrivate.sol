@@ -155,6 +155,55 @@ contract ZKPayrollPrivate {
         emit PayrollCreated(payrollId, msg.sender, totalAmount);
     }
 
+    /**
+     * @notice Create payroll via relayed transaction (escrow already has funds)
+     * @dev Only escrow can call. Funds must be pre-transferred via EIP-3009 relayer.
+     * @param employer The employer address (payroll owner for reclaim purposes)
+     * @param proof Groth16 proof components
+     * @param totalAmount Total amount (for verification, already in escrow)
+     * @param commitments Poseidon commitments
+     * @param recipients Recipient addresses
+     */
+    function createPayrollRelayed(
+        address employer,
+        uint256[8] calldata proof,
+        uint256 totalAmount,
+        uint256[5] calldata commitments,
+        address[5] calldata recipients
+    ) external returns (uint256 payrollId) {
+        if (msg.sender != escrow) revert Unauthorized();
+        if (totalAmount == 0) revert InvalidTotalAmount();
+        if (employer == address(0)) revert InvalidInputs();
+
+        // Verify ZK proof with 6 public signals: [totalAmount, commitments[0..4]]
+        uint256[2] memory a = [proof[0], proof[1]];
+        uint256[2][2] memory b = [[proof[2], proof[3]], [proof[4], proof[5]]];
+        uint256[2] memory c = [proof[6], proof[7]];
+        uint256[6] memory pubSignals = [
+            totalAmount,
+            commitments[0],
+            commitments[1],
+            commitments[2],
+            commitments[3],
+            commitments[4]
+        ];
+
+        if (!verifier.verifyProof(a, b, c, pubSignals)) revert InvalidProof();
+
+        // NO transfer - funds already in escrow via EIP-3009 relayer
+
+        // Store payroll
+        payrollId = nextPayrollId++;
+        Payroll storage p = payrolls[payrollId];
+        p.employer = employer;  // Use parameter, not msg.sender
+        p.totalAmount = totalAmount;
+        p.createdAt = block.timestamp;
+        p.commitments = commitments;
+        p.recipients = recipients;
+
+        emit PayrollCreated(payrollId, employer, totalAmount);
+    }
+
     // ============ Recipient Functions ============
 
     /**

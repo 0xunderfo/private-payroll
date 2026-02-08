@@ -63,7 +63,7 @@ This transparency creates real problems: salary negotiations become awkward when
 ┌─────────────────────────────────────────────────────────────────┐
 │                    SMART CONTRACTS (Plasma)                     │
 │  ┌──────────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │ PrivatePayroll │  │ Groth16      │  │ PoseidonT4       │   │
+│  │ PrivatePayroll   │  │ Groth16      │  │ PoseidonT4       │   │
 │  │ - createPayroll  │  │ Verifier     │  │ - On-chain hash  │   │
 │  │ - claimPayment   │  │ - BN254      │  │ - Commitment     │   │
 │  │ - markClaimed    │  │              │  │   verification   │   │
@@ -141,12 +141,12 @@ forge script script/DeployTestnet.s.sol --tc DeployTestnetScript \
 
 ## Demo
 
-Live frontend: 
+Live frontend: https://private-payroll.vercel.app
 
 | Video | Description |
 |-------|-------------|
-| [Pitch Video (2:30)](https://...) | Project overview for Programmable Cryptography track |
-| [Demo Video (75s)](https://...) | Full flow demo for Plasma bounty |
+| [Pitch Video (60s)](https://...) | Project overview for Programmable Cryptography track |
+| [Demo Video (2:30)](https://...) | Full flow demo for Plasma bounty |
 
 ## Deployed Contracts (Plasma Testnet)
 

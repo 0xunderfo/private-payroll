@@ -21,8 +21,8 @@ app.use(
       // Allow localhost and Vercel deployments
       if (!origin) return "http://localhost:3000";
       if (origin === "http://localhost:3000") return origin;
-      if (origin === "https://private-payroll.vercel.app") return origin;
-      if (origin.match(/https:\/\/private-payroll.*\.vercel\.app/)) return origin;
+      if (origin === "https://pvt-payroll.vercel.app") return origin;
+      if (origin.match(/https:\/\/pvt-payroll.*\.vercel\.app/)) return origin;
       return null;
     },
     allowMethods: ["GET", "POST", "OPTIONS"],
